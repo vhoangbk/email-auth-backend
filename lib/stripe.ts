@@ -90,7 +90,7 @@ export async function createBillingPortalSession(customerId: string) {
 export async function updateStripeSubscription(
   subscriptionId: string,
   newPriceId: string
-) {
+): Promise<Stripe.Subscription> {
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId)
 

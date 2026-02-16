@@ -401,7 +401,7 @@ export default function SubscriptionPage() {
             <ul style={{ textAlign: 'left', paddingLeft: '20px', marginBottom: '20px' }}>
               {Object.entries(plan.features).map(([key, value]) => (
                 <li key={key} style={{ marginBottom: '5px' }}>
-                  <strong>{key}:</strong> {typeof value === 'boolean' ? (value ? '✅' : '❌') : value}
+                  <strong>{key}:</strong> {typeof value === 'boolean' ? (value ? '✅' : '❌') : String(value)}
                 </li>
               ))}
             </ul>

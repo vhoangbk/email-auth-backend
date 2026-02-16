@@ -100,10 +100,10 @@ export async function POST(request: NextRequest) {
       data: {
         planId: newPlan.id,
         currentPeriodStart: new Date(
-          updatedStripeSubscription.current_period_start * 1000
+          (updatedStripeSubscription as any).current_period_start * 1000
         ),
         currentPeriodEnd: new Date(
-          updatedStripeSubscription.current_period_end * 1000
+          (updatedStripeSubscription as any).current_period_end * 1000
         ),
       },
       include: {

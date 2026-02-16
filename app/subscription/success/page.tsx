@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-export default function SubscriptionSuccessPage() {
+function SuccessContent() {
   const searchParams = useSearchParams()
   const sessionId = searchParams.get('session_id')
   const [countdown, setCountdown] = useState(5)
@@ -125,5 +125,13 @@ export default function SubscriptionSuccessPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function SubscriptionSuccessPage() {
+  return (
+    <Suspense fallback={<div style={{ textAlign: 'center', marginTop: '100px' }}>Loading...</div>}>
+      <SuccessContent />
+    </Suspense>
   )
 }

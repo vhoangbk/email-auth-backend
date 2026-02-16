@@ -167,16 +167,16 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       planId: plan.id,
       stripeSubscriptionId: subscription.id,
       status,
-      currentPeriodStart: subscription.current_period_start 
-        ? new Date(subscription.current_period_start * 1000) 
+      currentPeriodStart: (subscription as any).current_period_start 
+        ? new Date((subscription as any).current_period_start * 1000) 
         : null,
-      currentPeriodEnd: subscription.current_period_end 
-        ? new Date(subscription.current_period_end * 1000) 
+      currentPeriodEnd: (subscription as any).current_period_end 
+        ? new Date((subscription as any).current_period_end * 1000) 
         : null,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
-      canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
-      trialStart: subscription.trial_start ? new Date(subscription.trial_start * 1000) : null,
-      trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
+      cancelAtPeriodEnd: (subscription as any).cancel_at_period_end || false,
+      canceledAt: (subscription as any).canceled_at ? new Date((subscription as any).canceled_at * 1000) : null,
+      trialStart: (subscription as any).trial_start ? new Date((subscription as any).trial_start * 1000) : null,
+      trialEnd: (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null,
     }
 
     let subscriptionRecord
@@ -292,9 +292,9 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     }
 
     // Find associated subscription
-    const subscriptionId = typeof invoice.subscription === 'string' 
-      ? invoice.subscription 
-      : invoice.subscription?.id
+    const subscriptionId = typeof (invoice as any).subscription === 'string' 
+      ? (invoice as any).subscription 
+      : (invoice as any).subscription?.id
 
     let dbSubscription = null
     if (subscriptionId) {
@@ -367,9 +367,9 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     }
 
     // Find associated subscription
-    const subscriptionId = typeof invoice.subscription === 'string' 
-      ? invoice.subscription 
-      : invoice.subscription?.id
+    const subscriptionId = typeof (invoice as any).subscription === 'string' 
+      ? (invoice as any).subscription 
+      : (invoice as any).subscription?.id
 
     if (subscriptionId) {
       const dbSubscription = await prisma.subscription.findFirst({
