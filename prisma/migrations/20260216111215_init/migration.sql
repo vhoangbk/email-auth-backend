@@ -1,13 +1,45 @@
-/*
-  Warnings:
+-- CreateTable
+CREATE TABLE `users` (
+    `id` VARCHAR(191) NOT NULL,
+    `email` VARCHAR(191) NOT NULL,
+    `hashedPassword` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NULL,
+    `isVerified` BOOLEAN NOT NULL DEFAULT false,
+    `stripeCustomerId` VARCHAR(191) NULL,
+    `currentSubscriptionId` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
 
-  - A unique constraint covering the columns `[stripeCustomerId]` on the table `users` will be added. If there are existing duplicate values, this will fail.
-  - A unique constraint covering the columns `[currentSubscriptionId]` on the table `users` will be added. If there are existing duplicate values, this will fail.
+    UNIQUE INDEX `users_email_key`(`email`),
+    UNIQUE INDEX `users_stripeCustomerId_key`(`stripeCustomerId`),
+    UNIQUE INDEX `users_currentSubscriptionId_key`(`currentSubscriptionId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-*/
--- AlterTable
-ALTER TABLE `users` ADD COLUMN `currentSubscriptionId` VARCHAR(191) NULL,
-    ADD COLUMN `stripeCustomerId` VARCHAR(191) NULL;
+-- CreateTable
+CREATE TABLE `verification_tokens` (
+    `id` VARCHAR(191) NOT NULL,
+    `token` VARCHAR(191) NOT NULL,
+    `userId` VARCHAR(191) NOT NULL,
+    `expiresAt` DATETIME(3) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `verification_tokens_token_key`(`token`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `password_resets` (
+    `id` VARCHAR(191) NOT NULL,
+    `token` VARCHAR(191) NOT NULL,
+    `userId` VARCHAR(191) NOT NULL,
+    `expiresAt` DATETIME(3) NOT NULL,
+    `isUsed` BOOLEAN NOT NULL DEFAULT false,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `password_resets_token_key`(`token`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `subscription_plans` (
@@ -23,6 +55,7 @@ CREATE TABLE `subscription_plans` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
+    UNIQUE INDEX `subscription_plans_name_key`(`name`),
     UNIQUE INDEX `subscription_plans_stripePriceId_key`(`stripePriceId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -68,14 +101,14 @@ CREATE TABLE `invoices` (
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX `users_stripeCustomerId_key` ON `users`(`stripeCustomerId`);
-
--- CreateIndex
-CREATE UNIQUE INDEX `users_currentSubscriptionId_key` ON `users`(`currentSubscriptionId`);
-
 -- AddForeignKey
 ALTER TABLE `users` ADD CONSTRAINT `users_currentSubscriptionId_fkey` FOREIGN KEY (`currentSubscriptionId`) REFERENCES `subscriptions`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `verification_tokens` ADD CONSTRAINT `verification_tokens_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `password_resets` ADD CONSTRAINT `password_resets_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `subscriptions` ADD CONSTRAINT `subscriptions_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
