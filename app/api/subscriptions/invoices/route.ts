@@ -5,6 +5,11 @@ import { prisma } from '@/lib/prisma'
 
 import type { InvoiceResponse } from '@/types/subscription'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 /**
  * GET /api/subscriptions/invoices
  * Get user's invoice history

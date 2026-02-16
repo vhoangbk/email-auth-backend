@@ -5,6 +5,11 @@ import { verifyToken } from '@/lib/auth'
 
 import type { ErrorResponse } from '@/types/auth'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Get token from Authorization header

@@ -6,6 +6,11 @@ import { sendEmail, getPasswordResetEmailHTML } from '@/lib/email'
 
 import type { ErrorResponse } from '@/types/auth'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 // Request password reset
 export async function POST(request: NextRequest) {
   try {

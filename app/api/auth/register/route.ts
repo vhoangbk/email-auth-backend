@@ -6,6 +6,11 @@ import { sendEmail, getVerificationEmailHTML } from '@/lib/email'
 
 import type { RegisterRequest, ErrorResponse } from '@/types/auth'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: RegisterRequest = await request.json()

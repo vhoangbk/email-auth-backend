@@ -7,6 +7,11 @@ import { sendEmail } from '@/lib/email'
 
 import type { CancelSubscriptionRequest } from '@/types/subscription'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 /**
  * POST /api/subscriptions/cancel
  * Cancel user subscription

@@ -9,6 +9,11 @@ import type {
   CreateCheckoutResponse,
 } from '@/types/subscription'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 /**
  * POST /api/subscriptions/checkout
  * Create Stripe Checkout session for subscription

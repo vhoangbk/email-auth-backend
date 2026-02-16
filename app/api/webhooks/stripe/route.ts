@@ -5,6 +5,11 @@ import { prisma } from '@/lib/prisma'
 import { constructWebhookEvent } from '@/lib/stripe'
 import { sendEmail } from '@/lib/email'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 /**
  * POST /api/webhooks/stripe
  * Handle Stripe webhook events

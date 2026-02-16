@@ -5,6 +5,11 @@ import { verifyPassword, generateToken, isValidEmail } from '@/lib/auth'
 
 import type { LoginRequest, AuthResponse, ErrorResponse } from '@/types/auth'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: LoginRequest = await request.json()

@@ -4,6 +4,11 @@ import { verifyToken } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createBillingPortalSession } from '@/lib/stripe'
 
+// Handle CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200 })
+}
+
 /**
  * POST /api/subscriptions/portal
  * Create Stripe Billing Portal session
