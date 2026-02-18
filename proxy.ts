@@ -3,11 +3,26 @@ import type { NextRequest } from 'next/server'
 
 import { verifyTokenEdge } from '@/lib/auth-edge'
 
+// CORS headers for all API responses
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept',
+}
+
 // Add paths that require authentication
 const protectedPaths = ['/api/user/profile']
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // Handle CORS preflight requests before any auth check
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, {
+      status: 200,
+      headers: corsHeaders,
+    })
+  }
 
   // Check if path requires authentication
   const isProtectedPath = protectedPaths.some((path) => pathname.startsWith(path))
@@ -18,7 +33,7 @@ export async function proxy(request: NextRequest) {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
         { error: 'Authorization token required' },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       )
     }
 
@@ -26,17 +41,26 @@ export async function proxy(request: NextRequest) {
 
     try {
       await verifyTokenEdge(token)
-      // Token is valid, continue
-      return NextResponse.next()
+      // Token is valid, continue with CORS headers
+      const response = NextResponse.next()
+      Object.entries(corsHeaders).forEach(([key, value]) => {
+        response.headers.set(key, value)
+      })
+      return response
     } catch (error) {
       return NextResponse.json(
         { error: 'Invalid or expired token' },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       )
     }
   }
 
-  return NextResponse.next()
+  // Add CORS headers to all non-protected responses
+  const response = NextResponse.next()
+  Object.entries(corsHeaders).forEach(([key, value]) => {
+    response.headers.set(key, value)
+  })
+  return response
 }
 
 export const config = {
