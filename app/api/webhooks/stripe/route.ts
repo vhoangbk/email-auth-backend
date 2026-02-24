@@ -21,57 +21,76 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const signature = request.headers.get('stripe-signature')
 
-    if (!signature) {
-      return NextResponse.json(
-        { error: 'Missing stripe-signature header' },
-        { status: 400 }
-      )
-    }
+    console.log('=== WEBHOOK RECEIVED ===')
+    console.log('Signature:', signature ? 'Present' : 'Missing')
+    console.log('Body length:', body.length)
 
-    // Verify and construct event
+    // DEVELOPMENT MODE: Skip signature verification if no signature
+    // ⚠️ REMOVE THIS IN PRODUCTION!
     let event: Stripe.Event
-    try {
-      event = constructWebhookEvent(body, signature)
-    } catch (error) {
-      console.error('Webhook signature verification failed:', error)
-      return NextResponse.json(
-        { error: 'Invalid signature' },
-        { status: 400 }
-      )
+    
+    if (!signature && process.env.NODE_ENV === 'development') {
+      console.warn('⚠️ WARNING: Skipping signature verification in development mode')
+      event = JSON.parse(body)
+    } else {
+      if (!signature) {
+        return NextResponse.json(
+          { error: 'Missing stripe-signature header' },
+          { status: 400 }
+        )
+      }
+
+      // Verify and construct event
+      try {
+        event = constructWebhookEvent(body, signature)
+      } catch (error) {
+        console.error('Webhook signature verification failed:', error)
+        return NextResponse.json(
+          { error: 'Invalid signature' },
+          { status: 400 }
+        )
+      }
     }
 
     // Handle the event
-    console.log(`Received webhook event: ${event.type}`)
+    console.log(`✅ Received webhook event: ${event.type}`)
+    console.log('Event ID:', event.id)
 
     switch (event.type) {
       case 'checkout.session.completed':
+        console.log('📋 Processing checkout.session.completed')
         await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session)
         break
 
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
+        console.log('📋 Processing subscription created/updated')
         await handleSubscriptionUpdated(event.data.object as Stripe.Subscription)
         break
 
       case 'customer.subscription.deleted':
+        console.log('📋 Processing subscription deleted')
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription)
         break
 
       case 'invoice.paid':
+        console.log('📋 Processing invoice paid')
         await handleInvoicePaid(event.data.object as Stripe.Invoice)
         break
 
       case 'invoice.payment_failed':
+        console.log('📋 Processing invoice payment failed')
         await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice)
         break
 
       default:
-        console.log(`Unhandled event type: ${event.type}`)
+        console.log(`ℹ️ Unhandled event type: ${event.type}`)
     }
 
+    console.log('=== WEBHOOK PROCESSED SUCCESSFULLY ===\n')
     return NextResponse.json({ received: true }, { status: 200 })
   } catch (error) {
-    console.error('Webhook handler error:', error)
+    console.error('❌ Webhook handler error:', error)
     return NextResponse.json(
       { error: 'Webhook handler failed' },
       { status: 500 }
@@ -85,21 +104,27 @@ export async function POST(request: NextRequest) {
  */
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
   try {
+    console.log('📝 handleCheckoutSessionCompleted - Session ID:', session.id)
+    
     const userId = session.metadata?.userId || session.client_reference_id
 
     if (!userId) {
-      console.error('No userId found in checkout session')
+      console.error('❌ No userId found in checkout session')
       return
     }
+
+    console.log('👤 User ID:', userId)
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
     })
 
     if (!user) {
-      console.error(`User not found: ${userId}`)
+      console.error(`❌ User not found: ${userId}`)
       return
     }
+
+    console.log('✅ User found:', user.email)
 
     // Update user with Stripe customer ID
     if (session.customer && typeof session.customer === 'string') {
@@ -107,11 +132,12 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
         where: { id: userId },
         data: { stripeCustomerId: session.customer },
       })
+      console.log('✅ Updated user stripeCustomerId:', session.customer)
     }
 
-    console.log(`Checkout completed for user ${userId}`)
+    console.log(`✅ Checkout completed for user ${userId}`)
   } catch (error) {
-    console.error('Error handling checkout session completed:', error)
+    console.error('❌ Error handling checkout session completed:', error)
     throw error
   }
 }
@@ -122,9 +148,13 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
  */
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   try {
+    console.log('📝 handleSubscriptionUpdated - Subscription ID:', subscription.id)
+    
     const customerId = typeof subscription.customer === 'string' 
       ? subscription.customer 
       : subscription.customer.id
+
+    console.log('👤 Customer ID:', customerId)
 
     // Find user by Stripe customer ID
     const user = await prisma.user.findFirst({
@@ -132,17 +162,21 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     })
 
     if (!user) {
-      console.error(`User not found for customer: ${customerId}`)
+      console.error(`❌ User not found for customer: ${customerId}`)
       return
     }
+
+    console.log('✅ User found:', user.email)
 
     // Get the price ID from subscription
     const priceId = subscription.items.data[0]?.price.id
 
     if (!priceId) {
-      console.error('No price ID found in subscription')
+      console.error('❌ No price ID found in subscription')
       return
     }
+
+    console.log('💰 Price ID:', priceId)
 
     // Find the plan by Stripe price ID
     const plan = await prisma.subscriptionPlan.findFirst({
@@ -150,12 +184,16 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     })
 
     if (!plan) {
-      console.error(`Plan not found for price ID: ${priceId}`)
+      console.error(`❌ Plan not found for price ID: ${priceId}`)
+      console.log('Available plans:', await prisma.subscriptionPlan.findMany())
       return
     }
 
+    console.log('✅ Plan found:', plan.displayName)
+
     // Map Stripe status to our status
     const status = mapStripeStatus(subscription.status)
+    console.log('📊 Mapped status:', status)
 
     // Check if subscription already exists
     const existingSubscription = await prisma.subscription.findFirst({
@@ -182,6 +220,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     let subscriptionRecord
 
     if (existingSubscription) {
+      console.log('🔄 Updating existing subscription')
       // Update existing subscription
       subscriptionRecord = await prisma.subscription.update({
         where: { id: existingSubscription.id },
@@ -189,6 +228,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
         include: { plan: true },
       })
     } else {
+      console.log('🆕 Creating new subscription')
       // Create new subscription
       subscriptionRecord = await prisma.subscription.create({
         data: subscriptionData,
@@ -196,11 +236,15 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       })
     }
 
+    console.log('✅ Subscription record saved:', subscriptionRecord.id)
+
     // Update user's current subscription
     await prisma.user.update({
       where: { id: user.id },
       data: { currentSubscriptionId: subscriptionRecord.id },
     })
+
+    console.log('✅ Updated user currentSubscriptionId')
 
     // Send confirmation email for new subscriptions
     if (!existingSubscription && status === 'ACTIVE') {
@@ -217,14 +261,15 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
             <p>Thank you for subscribing!</p>
           `,
         })
+        console.log('✅ Confirmation email sent')
       } catch (emailError) {
-        console.error('Failed to send subscription confirmation email:', emailError)
+        console.error('❌ Failed to send subscription confirmation email:', emailError)
       }
     }
 
-    console.log(`Subscription ${subscription.id} updated for user ${user.id}`)
+    console.log(`✅ Subscription ${subscription.id} updated for user ${user.id}`)
   } catch (error) {
-    console.error('Error handling subscription updated:', error)
+    console.error('❌ Error handling subscription updated:', error)
     throw error
   }
 }
@@ -235,15 +280,19 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
  */
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   try {
+    console.log('📝 handleSubscriptionDeleted - Subscription ID:', subscription.id)
+    
     const existingSubscription = await prisma.subscription.findFirst({
       where: { stripeSubscriptionId: subscription.id },
       include: { user: true, plan: true },
     })
 
     if (!existingSubscription) {
-      console.error(`Subscription not found: ${subscription.id}`)
+      console.error(`❌ Subscription not found: ${subscription.id}`)
       return
     }
+
+    console.log('✅ Subscription found, marking as canceled')
 
     // Update subscription status
     await prisma.subscription.update({
@@ -260,9 +309,9 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
       data: { currentSubscriptionId: null },
     })
 
-    console.log(`Subscription ${subscription.id} deleted`)
+    console.log(`✅ Subscription ${subscription.id} deleted`)
   } catch (error) {
-    console.error('Error handling subscription deleted:', error)
+    console.error('❌ Error handling subscription deleted:', error)
     throw error
   }
 }
@@ -273,23 +322,29 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
  */
 async function handleInvoicePaid(invoice: Stripe.Invoice) {
   try {
+    console.log('📝 handleInvoicePaid - Invoice ID:', invoice.id)
+    
     const customerId = typeof invoice.customer === 'string' 
       ? invoice.customer 
       : invoice.customer?.id
 
     if (!customerId) {
-      console.error('No customer ID found in invoice')
+      console.error('❌ No customer ID found in invoice')
       return
     }
+
+    console.log('👤 Customer ID:', customerId)
 
     const user = await prisma.user.findFirst({
       where: { stripeCustomerId: customerId },
     })
 
     if (!user) {
-      console.error(`User not found for customer: ${customerId}`)
+      console.error(`❌ User not found for customer: ${customerId}`)
       return
     }
+
+    console.log('✅ User found:', user.email)
 
     // Find associated subscription
     const subscriptionId = typeof (invoice as any).subscription === 'string' 
@@ -301,6 +356,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
       dbSubscription = await prisma.subscription.findFirst({
         where: { stripeSubscriptionId: subscriptionId },
       })
+      console.log('✅ Linked subscription found:', dbSubscription?.id)
     }
 
     // Create invoice record
@@ -317,6 +373,8 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
       },
     })
 
+    console.log('✅ Invoice record created')
+
     // Send receipt email
     try {
       await sendEmail({
@@ -331,13 +389,14 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
           ${invoice.hosted_invoice_url ? `<p><a href="${invoice.hosted_invoice_url}">View Invoice</a></p>` : ''}
         `,
       })
+      console.log('✅ Receipt email sent')
     } catch (emailError) {
-      console.error('Failed to send invoice email:', emailError)
+      console.error('❌ Failed to send invoice email:', emailError)
     }
 
-    console.log(`Invoice ${invoice.id} paid for user ${user.id}`)
+    console.log(`✅ Invoice ${invoice.id} paid for user ${user.id}`)
   } catch (error) {
-    console.error('Error handling invoice paid:', error)
+    console.error('❌ Error handling invoice paid:', error)
     throw error
   }
 }
@@ -348,12 +407,14 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
  */
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
   try {
+    console.log('📝 handleInvoicePaymentFailed - Invoice ID:', invoice.id)
+    
     const customerId = typeof invoice.customer === 'string' 
       ? invoice.customer 
       : invoice.customer?.id
 
     if (!customerId) {
-      console.error('No customer ID found in invoice')
+      console.error('❌ No customer ID found in invoice')
       return
     }
 
@@ -362,9 +423,11 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     })
 
     if (!user) {
-      console.error(`User not found for customer: ${customerId}`)
+      console.error(`❌ User not found for customer: ${customerId}`)
       return
     }
+
+    console.log('✅ User found:', user.email)
 
     // Find associated subscription
     const subscriptionId = typeof (invoice as any).subscription === 'string' 
@@ -382,6 +445,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
           where: { id: dbSubscription.id },
           data: { status: 'PAST_DUE' },
         })
+        console.log('✅ Updated subscription status to PAST_DUE')
       }
     }
 
@@ -399,13 +463,14 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
           <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/subscription">Update Payment Method</a></p>
         `,
       })
+      console.log('✅ Payment failed email sent')
     } catch (emailError) {
-      console.error('Failed to send payment failed email:', emailError)
+      console.error('❌ Failed to send payment failed email:', emailError)
     }
 
-    console.log(`Payment failed for invoice ${invoice.id}, user ${user.id}`)
+    console.log(`✅ Payment failed for invoice ${invoice.id}, user ${user.id}`)
   } catch (error) {
-    console.error('Error handling invoice payment failed:', error)
+    console.error('❌ Error handling invoice payment failed:', error)
     throw error
   }
 }

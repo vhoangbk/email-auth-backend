@@ -42,7 +42,6 @@ export interface UserProfileResponse {
 export async function getUserProfile(
   token: string
 ): Promise<ApiResponse<UserProfileResponse>> {
-  console.log('Fetching user profile with token:', token); // Debug log
   try {
     const response = await fetch(`${API_BASE_URL}/user/profile`, {
       method: 'GET',
