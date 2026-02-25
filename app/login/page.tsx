@@ -28,6 +28,8 @@ export default function LoginPage() {
 
       const result = await getUserProfile(token);
 
+      console.log('getUserProfile', result);
+
       if (result.success && result.data) {
         // User is already logged in, redirect to home
         window.location.href = '/';

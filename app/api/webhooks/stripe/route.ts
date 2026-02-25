@@ -21,10 +21,6 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const signature = request.headers.get('stripe-signature')
 
-    console.log('=== WEBHOOK RECEIVED ===')
-    console.log('Signature:', signature ? 'Present' : 'Missing')
-    console.log('Body length:', body.length)
-
     // DEVELOPMENT MODE: Skip signature verification if no signature
     // ⚠️ REMOVE THIS IN PRODUCTION!
     let event: Stripe.Event
@@ -53,41 +49,37 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle the event
-    console.log(`✅ Received webhook event: ${event.type}`)
-    console.log('Event ID:', event.id)
+    console.log(`✅ Received webhook event: ${event}`)
 
     switch (event.type) {
       case 'checkout.session.completed':
-        console.log('📋 Processing checkout.session.completed')
         await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session)
         break
 
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
-        console.log('📋 Processing subscription created/updated')
         await handleSubscriptionUpdated(event.data.object as Stripe.Subscription)
         break
 
       case 'customer.subscription.deleted':
-        console.log('📋 Processing subscription deleted')
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription)
         break
 
       case 'invoice.paid':
-        console.log('📋 Processing invoice paid')
         await handleInvoicePaid(event.data.object as Stripe.Invoice)
+        break
+        
+      case 'invoice.payment_succeeded':
+        await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice)
         break
 
       case 'invoice.payment_failed':
-        console.log('📋 Processing invoice payment failed')
         await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice)
         break
 
       default:
         console.log(`ℹ️ Unhandled event type: ${event.type}`)
     }
-
-    console.log('=== WEBHOOK PROCESSED SUCCESSFULLY ===\n')
     return NextResponse.json({ received: true }, { status: 200 })
   } catch (error) {
     console.error('❌ Webhook handler error:', error)
@@ -148,8 +140,6 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
  */
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   try {
-    console.log('📝 handleSubscriptionUpdated - Subscription ID:', subscription.id)
-    
     const customerId = typeof subscription.customer === 'string' 
       ? subscription.customer 
       : subscription.customer.id
@@ -162,7 +152,6 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     })
 
     if (!user) {
-      console.error(`❌ User not found for customer: ${customerId}`)
       return
     }
 
@@ -172,11 +161,8 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     const priceId = subscription.items.data[0]?.price.id
 
     if (!priceId) {
-      console.error('❌ No price ID found in subscription')
       return
     }
-
-    console.log('💰 Price ID:', priceId)
 
     // Find the plan by Stripe price ID
     const plan = await prisma.subscriptionPlan.findFirst({
@@ -184,22 +170,13 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     })
 
     if (!plan) {
-      console.error(`❌ Plan not found for price ID: ${priceId}`)
-      console.log('Available plans:', await prisma.subscriptionPlan.findMany())
       return
     }
 
-    console.log('✅ Plan found:', plan.displayName)
-
     // Map Stripe status to our status
     const status = mapStripeStatus(subscription.status)
-    console.log('📊 Mapped status:', status)
 
-    // Check if subscription already exists
-    const existingSubscription = await prisma.subscription.findFirst({
-      where: { stripeSubscriptionId: subscription.id },
-    })
-
+    // Prepare subscription data
     const subscriptionData = {
       userId: user.id,
       planId: plan.id,
@@ -217,37 +194,51 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       trialEnd: (subscription as any).trial_end ? new Date((subscription as any).trial_end * 1000) : null,
     }
 
-    let subscriptionRecord
-
-    if (existingSubscription) {
-      console.log('🔄 Updating existing subscription')
-      // Update existing subscription
-      subscriptionRecord = await prisma.subscription.update({
-        where: { id: existingSubscription.id },
-        data: subscriptionData,
+    // Use transaction to handle duplicate inserts and update user atomically
+    const result = await prisma.$transaction(async (tx) => {
+      // Check if subscription already exists (handle duplicate webhook calls)
+      const existingSubscription = await tx.subscription.findUnique({
+        where: { stripeSubscriptionId: subscription.id },
         include: { plan: true },
       })
-    } else {
-      console.log('🆕 Creating new subscription')
-      // Create new subscription
-      subscriptionRecord = await prisma.subscription.create({
-        data: subscriptionData,
-        include: { plan: true },
+
+      let subscriptionRecord
+
+      if (existingSubscription) {
+        console.log('🔄 Updating existing subscription (duplicate webhook call handled)')
+        // Update existing subscription - idempotent operation
+        subscriptionRecord = await tx.subscription.update({
+          where: { id: existingSubscription.id },
+          data: subscriptionData,
+          include: { plan: true },
+        })
+      } else {
+        console.log('🆕 Creating new subscription record')
+        // Create new subscription
+        subscriptionRecord = await tx.subscription.create({
+          data: subscriptionData,
+          include: { plan: true },
+        })
+      }
+
+      console.log('✅ Subscription record saved:', subscriptionRecord.id)
+
+      // Update user's current subscription reference
+      await tx.user.update({
+        where: { id: user.id },
+        data: { currentSubscriptionId: subscriptionRecord.id },
       })
-    }
 
-    console.log('✅ Subscription record saved:', subscriptionRecord.id)
+      console.log('✅ Updated user currentSubscriptionId')
 
-    // Update user's current subscription
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { currentSubscriptionId: subscriptionRecord.id },
+      return {
+        subscriptionRecord,
+        isNewSubscription: !existingSubscription,
+      }
     })
 
-    console.log('✅ Updated user currentSubscriptionId')
-
-    // Send confirmation email for new subscriptions
-    if (!existingSubscription && status === 'ACTIVE') {
+    // Send confirmation email for new subscriptions (outside transaction)
+    if (result.isNewSubscription && status === 'ACTIVE') {
       try {
         await sendEmail({
           to: user.email,
@@ -257,7 +248,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
             <p>Hi ${user.name || 'there'},</p>
             <p>Your subscription has been activated successfully.</p>
             <p>Plan: <strong>${plan.displayName}</strong></p>
-            <p>Next billing date: ${subscriptionRecord.currentPeriodEnd?.toLocaleDateString()}</p>
+            <p>Next billing date: ${result.subscriptionRecord.currentPeriodEnd?.toLocaleDateString()}</p>
             <p>Thank you for subscribing!</p>
           `,
         })
@@ -267,7 +258,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       }
     }
 
-    console.log(`✅ Subscription ${subscription.id} updated for user ${user.id}`)
+    console.log(`✅ Subscription ${subscription.id} ${result.isNewSubscription ? 'created' : 'updated'} for user ${user.id}`)
   } catch (error) {
     console.error('❌ Error handling subscription updated:', error)
     throw error
@@ -279,20 +270,15 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
  * Marks subscription as canceled
  */
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  try {
-    console.log('📝 handleSubscriptionDeleted - Subscription ID:', subscription.id)
-    
+  try {    
     const existingSubscription = await prisma.subscription.findFirst({
       where: { stripeSubscriptionId: subscription.id },
       include: { user: true, plan: true },
     })
 
     if (!existingSubscription) {
-      console.error(`❌ Subscription not found: ${subscription.id}`)
       return
     }
-
-    console.log('✅ Subscription found, marking as canceled')
 
     // Update subscription status
     await prisma.subscription.update({
@@ -308,8 +294,6 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
       where: { id: existingSubscription.userId },
       data: { currentSubscriptionId: null },
     })
-
-    console.log(`✅ Subscription ${subscription.id} deleted`)
   } catch (error) {
     console.error('❌ Error handling subscription deleted:', error)
     throw error
@@ -322,14 +306,11 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
  */
 async function handleInvoicePaid(invoice: Stripe.Invoice) {
   try {
-    console.log('📝 handleInvoicePaid - Invoice ID:', invoice.id)
-    
     const customerId = typeof invoice.customer === 'string' 
       ? invoice.customer 
       : invoice.customer?.id
 
     if (!customerId) {
-      console.error('❌ No customer ID found in invoice')
       return
     }
 
@@ -340,11 +321,8 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     })
 
     if (!user) {
-      console.error(`❌ User not found for customer: ${customerId}`)
       return
     }
-
-    console.log('✅ User found:', user.email)
 
     // Find associated subscription
     const subscriptionId = typeof (invoice as any).subscription === 'string' 
@@ -359,21 +337,28 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
       console.log('✅ Linked subscription found:', dbSubscription?.id)
     }
 
-    // Create invoice record
-    await prisma.invoice.create({
-      data: {
-        userId: user.id,
-        subscriptionId: dbSubscription?.id,
-        stripeInvoiceId: invoice.id,
-        amount: invoice.amount_paid / 100, // Convert cents to dollars
-        currency: invoice.currency,
-        status: 'PAID',
-        invoiceUrl: invoice.hosted_invoice_url,
-        paidAt: new Date(invoice.status_transitions.paid_at! * 1000),
-      },
+    // Upsert invoice record - handle Stripe retries (idempotent)
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { stripeInvoiceId: invoice.id },
     })
 
-    console.log('✅ Invoice record created')
+    if (existingInvoice) {
+      console.log('⚠️ Invoice already exists, skipping duplicate:', invoice.id)
+    } else {
+      await prisma.invoice.create({
+        data: {
+          userId: user.id,
+          subscriptionId: dbSubscription?.id,
+          stripeInvoiceId: invoice.id,
+          amount: invoice.amount_paid / 100, // Convert cents to dollars
+          currency: invoice.currency,
+          status: 'PAID',
+          invoiceUrl: invoice.hosted_invoice_url,
+          paidAt: new Date(invoice.status_transitions.paid_at! * 1000),
+        },
+      })
+      console.log('✅ Invoice record created')
+    }
 
     // Send receipt email
     try {
@@ -402,13 +387,95 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 }
 
 /**
+ * Handle invoice.payment_succeeded event
+ * Creates or updates subscription record when payment succeeds
+ */
+async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+  try {
+    console.log('📝 handleInvoicePaymentSucceeded - Invoice ID:', invoice.id)
+    
+    const customerId = typeof invoice.customer === 'string' 
+      ? invoice.customer 
+      : invoice.customer?.id
+
+    if (!customerId) {
+      console.error('❌ No customer ID found in invoice')
+      return
+    }
+
+    console.log('👤 Customer ID:', customerId)
+
+    const user = await prisma.user.findFirst({
+      where: { stripeCustomerId: customerId },
+    })
+
+    if (!user) {
+      console.error(`❌ User not found for customer: ${customerId}`)
+      return
+    }
+
+    console.log('✅ User found:', user.email)
+
+    // Get subscription ID from invoice
+    const subscriptionId = typeof (invoice as any).subscription === 'string' 
+      ? (invoice as any).subscription 
+      : (invoice as any).subscription?.id
+
+    if (!subscriptionId) {
+      console.log('ℹ️ No subscription ID in invoice, skipping subscription update')
+      return
+    }
+
+    console.log('📋 Subscription ID:', subscriptionId)
+
+    // Check if subscription already exists in our database
+    const existingSubscription = await prisma.subscription.findFirst({
+      where: { stripeSubscriptionId: subscriptionId },
+      include: { plan: true },
+    })
+
+    if (existingSubscription) {
+      console.log('✅ Subscription exists, updating status to ACTIVE')
+      
+      // Update existing subscription to ACTIVE
+      await prisma.subscription.update({
+        where: { id: existingSubscription.id },
+        data: { 
+          status: 'ACTIVE',
+          currentPeriodStart: (invoice as any).period_start 
+            ? new Date((invoice as any).period_start * 1000) 
+            : existingSubscription.currentPeriodStart,
+          currentPeriodEnd: (invoice as any).period_end 
+            ? new Date((invoice as any).period_end * 1000) 
+            : existingSubscription.currentPeriodEnd,
+        },
+      })
+
+      // Ensure user's currentSubscriptionId is set
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { currentSubscriptionId: existingSubscription.id },
+      })
+
+      console.log('✅ Updated subscription status and user reference')
+    } else {
+      console.log('⚠️ Subscription not found in database, it should have been created by subscription.created event')
+      // Subscription should already exist from subscription.created/updated events
+      // If it doesn't exist, log warning but don't create incomplete record
+      return
+    }
+  } catch (error) {
+    console.error('❌ Error handling invoice payment succeeded:', error)
+    throw error
+  }
+}
+
+/**
  * Handle invoice.payment_failed event
  * Updates subscription status and sends notification
  */
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
   try {
-    console.log('📝 handleInvoicePaymentFailed - Invoice ID:', invoice.id)
-    
     const customerId = typeof invoice.customer === 'string' 
       ? invoice.customer 
       : invoice.customer?.id
@@ -463,12 +530,10 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
           <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/subscription">Update Payment Method</a></p>
         `,
       })
-      console.log('✅ Payment failed email sent')
     } catch (emailError) {
       console.error('❌ Failed to send payment failed email:', emailError)
     }
 
-    console.log(`✅ Payment failed for invoice ${invoice.id}, user ${user.id}`)
   } catch (error) {
     console.error('❌ Error handling invoice payment failed:', error)
     throw error
