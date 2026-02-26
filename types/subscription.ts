@@ -1,5 +1,3 @@
-import type { Subscription, SubscriptionPlan, Invoice, User } from '@prisma/client'
-
 // Subscription Tier Enum
 export enum SubscriptionTier {
   FREE = 'FREE',
@@ -30,18 +28,6 @@ export enum InvoiceStatus {
 // Billing Interval Type
 export type BillingInterval = 'monthly' | 'yearly' | 'lifetime'
 
-// Subscription with relations
-export type SubscriptionWithPlan = Subscription & {
-  plan: SubscriptionPlan
-}
-
-// Invoice with relations
-export type InvoiceWithSubscription = Invoice & {
-  subscription?: SubscriptionWithPlan | null
-}
-
-// Request/Response Types
-
 export interface CreateCheckoutRequest {
   priceId: string
   billingInterval?: BillingInterval
@@ -58,21 +44,6 @@ export interface UpdateSubscriptionRequest {
 
 export interface CancelSubscriptionRequest {
   immediate?: boolean
-}
-
-export interface SubscriptionResponse {
-  subscription: SubscriptionWithPlan | null
-  usage?: {
-    remainingTrialDays?: number
-    daysUntilRenewal?: number
-  }
-}
-
-export interface InvoiceResponse {
-  invoices: Invoice[]
-  total: number
-  page: number
-  limit: number
 }
 
 export interface PlanFeatures {
