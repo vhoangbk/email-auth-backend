@@ -45,6 +45,8 @@ export async function GET(request: NextRequest) {
         isVerified: true,
         createdAt: true,
         updatedAt: true,
+        stripeCurrentSubscriptionId: true,
+        stripeCustomerId: true,
       },
     })
 

@@ -26,7 +26,7 @@ All paid plans include a **14-day free trial**.
 ### 1. Start Webhook Listener
 
 ```bash
-stripe listen --forward-to localhost:3000/api/webhooks/stripe
+stripe listen --forward-to localhost:3000/api/webhooks
 ```
 
 Keep this running in a separate terminal. This forwards Stripe events to your local webhook endpoint.

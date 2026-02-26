@@ -1,109 +1,55 @@
-import { NextRequest, NextResponse } from 'next/server'
-
-import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { createCheckoutSession, getOrCreateStripeCustomer } from '@/lib/stripe'
-
-import type {
-  CreateCheckoutRequest,
-  CreateCheckoutResponse,
-} from '@/types/subscription'
-
-// Handle CORS preflight requests
-export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, { status: 200 })
-}
+import { NextRequest, NextResponse } from 'next/server';
+import { stripe } from '@/lib/stripe';
 
 /**
- * POST /api/subscriptions/checkout
- * Create Stripe Checkout session for subscription
- * Protected route - requires authentication
+ * POST /api/checkout
+ * Creates a Stripe Checkout session for a given price
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const body = await request.json();
+    const { priceId, userId, userEmail } = body;
+
+    if (!priceId) {
       return NextResponse.json(
-        { error: 'Authorization token required' },
-        { status: 401 }
-      )
-    }
-
-    const token = authHeader.substring(7)
-    let payload
-    try {
-      payload = verifyToken(token)
-    } catch (error) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-    }
-
-    // Get request body
-    const body: CreateCheckoutRequest = await request.json()
-
-    if (!body.priceId) {
-      return NextResponse.json(
-        { error: 'priceId is required' },
+        { error: 'Price ID is required' },
         { status: 400 }
-      )
+      );
     }
 
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    })
+    // Fetch the price to determine if it's recurring or one-time
+    const price = await stripe.prices.retrieve(priceId);
+    const mode = price.type === 'recurring' ? 'subscription' : 'payment';
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
+    // Create Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      mode,
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscriptions/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscriptions/cancel`,
+      client_reference_id: userId,
+      customer_email: userEmail,
+      metadata: {
+        userId,
+        userEmail,
+      },
+    });
 
-    // Verify the plan exists
-    const plan = await prisma.subscriptionPlan.findUnique({
-      where: { stripePriceId: body.priceId },
-    })
-
-    if (!plan) {
-      return NextResponse.json(
-        { error: 'Invalid subscription plan' },
-        { status: 400 }
-      )
-    }
-
-    // Get or create Stripe customer
-    const customer = await getOrCreateStripeCustomer(
-      user.email,
-      user.id,
-      user.name || undefined
-    )
-
-    // Update user with Stripe customer ID if not already set
-    if (!user.stripeCustomerId) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { stripeCustomerId: customer.id },
-      })
-    }
-
-    // Create checkout session
-    const session = await createCheckoutSession({
-      userId: user.id,
-      userEmail: user.email,
-      priceId: body.priceId,
-      trialDays: plan.trialDays > 0 ? plan.trialDays : undefined,
-    })
-
-    const response: CreateCheckoutResponse = {
-      sessionId: session.sessionId,
-      url: session.url,
-    }
-
-    return NextResponse.json(response, { status: 200 })
-  } catch (error) {
-    console.error('Checkout session creation error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create checkout session'
+    return NextResponse.json({ 
+      sessionId: session.id,
+      url: session.url 
+    });
+  } catch (error: any) {
+    console.error('Error creating checkout session:', error);
     return NextResponse.json(
-      { error: errorMessage },
+      { error: error.message || 'Failed to create checkout session' },
       { status: 500 }
-    )
+    );
   }
 }
