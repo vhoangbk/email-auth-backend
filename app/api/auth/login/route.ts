@@ -69,12 +69,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json<AuthResponse>(
       {
         token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          isVerified: user.isVerified,
-        },
+        user,
       },
       { status: 200 }
     )
