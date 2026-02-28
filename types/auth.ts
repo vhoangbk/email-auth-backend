@@ -17,7 +17,9 @@ export interface AuthResponse {
     id: string
     email: string
     name: string | null
-    isVerified: boolean
+    isVerified: boolean,
+    stripeCurrentSubscriptionId: string | null
+    stripeCustomerId: string | null
   }
 }
 
