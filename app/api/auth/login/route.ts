@@ -69,7 +69,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json<AuthResponse>(
       {
         token,
-        user,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          isVerified: user.isVerified,
+          stripeCurrentSubscriptionId: user.stripeCurrentSubscriptionId,
+          stripeCustomerId: user.stripeCustomerId,
+        },
       },
       { status: 200 }
     )
