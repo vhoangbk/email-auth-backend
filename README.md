@@ -66,7 +66,7 @@ DATABASE_URL="mysql://username:password@localhost:3306/email_auth"
 JWT_SECRET="your-super-secret-jwt-key-min-32-chars"
 
 # Application URL
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
+PUBLIC_APP_URL="http://localhost:3000"
 
 # SMTP settings
 SMTP_HOST="smtp.gmail.com"

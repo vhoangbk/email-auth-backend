@@ -335,7 +335,7 @@ npx prisma generate
 
 - Verify Stripe Price IDs are correct
 - Check user has email verified
-- Ensure `NEXT_PUBLIC_APP_URL` is set in `.env`
+- Ensure `PUBLIC_APP_URL` is set in `.env`
 
 ### Database Connection Failed
 

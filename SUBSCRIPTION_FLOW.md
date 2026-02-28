@@ -492,7 +492,7 @@ const updatedSubscription = await stripe.subscriptions.update(
 // Tạo Stripe Billing Portal session
 const session = await stripe.billingPortal.sessions.create({
   customer: user.stripeCustomerId,
-  return_url: `${NEXT_PUBLIC_APP_URL}/subscription`
+  return_url: `${PUBLIC_APP_URL}/subscription`
 })
 
 // Redirect user đến portal
@@ -595,7 +595,7 @@ SELECT * FROM invoices WHERE userId = 'xxx';
 ✅ STRIPE_SECRET_KEY
 ✅ STRIPE_PUBLISHABLE_KEY
 ✅ STRIPE_WEBHOOK_SECRET
-✅ NEXT_PUBLIC_APP_URL
+✅ PUBLIC_APP_URL
 ✅ DATABASE_URL
 ✅ JWT_SECRET
 ✅ SMTP_* (for emails)

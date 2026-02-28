@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Send verification email
-    const verificationUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/verify?token=${token}`
+    const verificationUrl = `${process.env.PUBLIC_APP_URL || 'http://localhost:3000'}/verify-email?token=${token}`
     
     try {
       await sendEmail({

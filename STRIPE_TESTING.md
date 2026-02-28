@@ -144,7 +144,7 @@ Your webhook handler processes these events:
 STRIPE_SECRET_KEY="sk_test_..."
 STRIPE_PUBLISHABLE_KEY="pk_test_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."  # Get from Stripe Dashboard
-NEXT_PUBLIC_APP_URL="http://localhost:3000"  # or your production URL
+PUBLIC_APP_URL="http://localhost:3000"  # or your production URL
 ```
 
 ### Trial Period
@@ -182,7 +182,7 @@ Before deploying to production:
 
 2. **Update environment variables:**
    - Set `NODE_ENV=production`
-   - Set `NEXT_PUBLIC_APP_URL` to your production URL
+   - Set `PUBLIC_APP_URL` to your production URL
    - Use production Stripe keys (start with `sk_live_` and `pk_live_`)
 
 3. **Remove development webhook bypass:**

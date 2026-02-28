@@ -1,6 +1,6 @@
 import type { ApiResponse } from '@/frontend/types';
 
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_APP_URL}/api`;
+const API_BASE_URL = `${process.env.PUBLIC_APP_URL}/api`;
 
 export interface RegisterRequest {
   email: string;

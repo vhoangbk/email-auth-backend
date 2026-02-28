@@ -49,7 +49,7 @@ export default function SubscriptionPage() {
   // Fetch subscription plans
   const fetchPlans = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/subscriptions/plans`)
+      const res = await fetch(`${process.env.PUBLIC_APP_URL}/api/subscriptions/plans`)
       const data = await res.json()
       setPlans(data)
     } catch (error) {
@@ -60,7 +60,7 @@ export default function SubscriptionPage() {
   // Fetch current subscription
   const fetchCurrentSubscription = async (authToken: string) => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/subscriptions/current`, {
+      const res = await fetch(`${process.env.PUBLIC_APP_URL}/api/subscriptions/current`, {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -81,7 +81,7 @@ export default function SubscriptionPage() {
     setMessage('')
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/login`, {
+      const res = await fetch(`${process.env.PUBLIC_APP_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -110,7 +110,7 @@ export default function SubscriptionPage() {
     setMessage('')
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/register`, {
+      const res = await fetch(`${process.env.PUBLIC_APP_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -145,7 +145,7 @@ export default function SubscriptionPage() {
     setMessage(`Creating checkout session for ${planName}...`)
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/subscriptions/checkout`, {
+      const res = await fetch(`${process.env.PUBLIC_APP_URL}/api/subscriptions/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -175,7 +175,7 @@ export default function SubscriptionPage() {
 
     setLoading(true)
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/subscriptions/cancel`, {
+      const res = await fetch(`${process.env.PUBLIC_APP_URL}/api/subscriptions/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -202,7 +202,7 @@ export default function SubscriptionPage() {
   const handleBillingPortal = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/subscriptions/portal`, {
+      const res = await fetch(`${process.env.PUBLIC_APP_URL}/api/subscriptions/portal`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
